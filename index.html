@@ -1,149 +1,291 @@
 <!doctype html>
 <html lang="nl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Weekend-ondersteuning</title>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weekend-ondersteuning</title>
+  <style>
+    :root{
+      --bg:#f8fafc; --card:#ffffff; --border:#e2e8f0; --text:#0f172a; --muted:#475569;
+      --shadow: 0 1px 2px rgba(15,23,42,.06);
+      --radius:18px;
+      --btn:#0f172a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;background:var(--bg);color:var(--text)}
+    .wrap{max-width:980px;margin:0 auto;padding:16px}
+    @media(min-width:640px){.wrap{padding:32px}}
+    h1{font-size:28px;margin:0 0 6px 0;letter-spacing:-.02em}
+    .sub{color:var(--muted);margin:0 0 18px 0}
+    .grid{display:grid;gap:18px}
+    @media(min-width:1024px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+    @media(min-width:640px){.card{padding:22px}}
+    .row{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+    .pill{background:#f1f5f9;border:1px solid var(--border);border-radius:16px;padding:14px;min-width:220px}
+    .label{font-size:12px;color:var(--muted)}
+    .big{font-size:28px;font-weight:700;margin-top:4px}
+    .small{font-size:12px;color:var(--muted);margin-top:8px}
+    h2,h3{margin:0 0 8px 0}
+    h2{font-size:18px}
+    h3{font-size:18px}
+    .muted{color:var(--muted)}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th{color:var(--muted);font-weight:600;text-align:left;padding:10px 8px}
+    td{padding:10px 8px;border-top:1px solid #f1f5f9;white-space:nowrap}
+    .inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    input{width:100%;padding:10px 12px;border-radius:14px;border:1px solid var(--border);font-size:14px}
+    button{width:100%;margin-top:12px;border:0;border-radius:16px;padding:12px 14px;background:var(--btn);color:#fff;font-weight:650;cursor:pointer}
+    button:hover{opacity:.95}
+    footer{margin-top:18px;color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Weekend-ondersteuning</h1>
+      <p class="sub" id="weekline"></p>
+    </header>
 
-    <!-- Tailwind via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <section class="card">
+      <div class="row">
+        <div>
+          <h2>Dit weekend</h2>
+          <p class="muted" id="thisweek"></p>
+          <p class="muted" style="font-size:13px" id="note"></p>
+        </div>
+        <div class="pill">
+          <div class="label">Ondersteuner</div>
+          <div class="big" id="supporter"></div>
+          <div class="small" id="step"></div>
+        </div>
+      </div>
+    </section>
 
-    <!-- React 18 (UMD) -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <section class="grid" style="margin-top:18px">
+      <div class="card">
+        <h3>Komende weekenden (indicatie)</h3>
+        <p class="muted" style="margin-top:0;font-size:13px">Toont de planning per ISO week (za/zo).</p>
+        <div style="overflow:auto;margin-top:10px">
+          <table>
+            <thead>
+              <tr>
+                <th>Weekend</th>
+                <th>Week</th>
+                <th>Voor</th>
+                <th>Ondersteuner</th>
+              </tr>
+            </thead>
+            <tbody id="upcoming"></tbody>
+          </table>
+        </div>
+      </div>
 
-    <!-- Babel (zodat JSX in de browser werkt) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  </head>
+      <div class="card">
+        <h3>Instellingen (anker voor roulatie)</h3>
+        <p class="muted" style="margin-top:0;font-size:13px">
+          Hiermee bepaal je welke ISO week als “eerste” telt (die dan de 1e naam in de lijst krijgt).
+        </p>
 
-  <body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
+        <div class="card" style="box-shadow:none;margin-top:12px">
+          <div style="font-weight:650">Even weken → Jerico</div>
+          <div class="muted" style="font-size:13px;margin-top:4px">Supporters: Younes / Tim</div>
+          <div class="inputs">
+            <label class="muted" style="font-size:13px">
+              Anker jaar
+              <input id="evenYear" inputmode="numeric" />
+            </label>
+            <label class="muted" style="font-size:13px">
+              Anker week (even)
+              <input id="evenWeek" inputmode="numeric" />
+            </label>
+          </div>
+        </div>
 
-    <script type="text/babel">
-      const { useEffect, useMemo, useState } = React;
+        <div class="card" style="box-shadow:none;margin-top:12px">
+          <div style="font-weight:650">Oneven weken → Grada</div>
+          <div class="muted" style="font-size:13px;margin-top:4px">Supporters: Lion / Mille</div>
+          <div class="inputs">
+            <label class="muted" style="font-size:13px">
+              Anker jaar
+              <input id="oddYear" inputmode="numeric" />
+            </label>
+            <label class="muted" style="font-size:13px">
+              Anker week (oneven)
+              <input id="oddWeek" inputmode="numeric" />
+            </label>
+          </div>
+        </div>
 
-      // --- ISO week helpers (no deps) ---
-      function isoWeekYearAndNumber(date) {
-        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-        const dayNum = d.getUTCDay() || 7; // Mon=1..Sun=7
-        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        <button id="saveBtn">Opslaan</button>
+        <button id="resetBtn" style="background:#334155">Reset naar standaard</button>
 
-        const isoYear = d.getUTCFullYear();
+        <div class="muted" style="font-size:12px;margin-top:10px">
+          Tip: als je wil dat “de eerstvolgende even week” altijd met Younes start, zet het anker op die week.
+        </div>
+      </div>
+    </section>
 
-        const yearStart = new Date(Date.UTC(isoYear, 0, 1));
-        const yearStartDay = yearStart.getUTCDay() || 7;
-        const week1Start = new Date(yearStart);
-        week1Start.setUTCDate(
-          yearStart.getUTCDate() + (yearStartDay <= 4 ? 1 - yearStartDay : 8 - yearStartDay)
-        );
+    <footer>
+      Let op: dit gebruikt ISO weeknummers. Als je organisatie een andere definitie gebruikt, kan ik dit aanpassen.
+    </footer>
+  </div>
 
-        const diffMs = d.getTime() - week1Start.getTime();
-        const weekNo = 1 + Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
-        return { isoYear, weekNo };
+  <script>
+    // --- ISO week helpers ---
+    function isoWeekYearAndNumber(date){
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const isoYear = d.getUTCFullYear();
+      const yearStart = new Date(Date.UTC(isoYear,0,1));
+      const yearStartDay = yearStart.getUTCDay() || 7;
+      const week1Start = new Date(yearStart);
+      week1Start.setUTCDate(yearStart.getUTCDate() + (yearStartDay <= 4 ? 1 - yearStartDay : 8 - yearStartDay));
+      const diffMs = d.getTime() - week1Start.getTime();
+      const weekNo = 1 + Math.round(diffMs / (7*24*60*60*1000));
+      return { isoYear, weekNo };
+    }
+    const isEven = (n)=> n%2===0;
+
+    function startOfWeekendForIsoWeek(isoYear, weekNo){
+      const jan4 = new Date(isoYear,0,4);
+      const jan4Day = jan4.getDay() || 7;
+      const mondayWeek1 = new Date(jan4);
+      mondayWeek1.setDate(jan4.getDate() - (jan4Day - 1));
+      const monday = new Date(mondayWeek1);
+      monday.setDate(mondayWeek1.getDate() + (weekNo - 1) * 7);
+      const saturday = new Date(monday);
+      saturday.setDate(monday.getDate() + 5);
+      return saturday;
+    }
+    function fmtDate(d){
+      return d.toLocaleDateString(undefined,{weekday:"short",year:"numeric",month:"short",day:"numeric"});
+    }
+    function parityIndexFromAnchor(anchorYear, anchorWeek, currentYear, currentWeek, parity){
+      const a = startOfWeekendForIsoWeek(anchorYear, anchorWeek);
+      const c = startOfWeekendForIsoWeek(currentYear, currentWeek);
+      const diffWeeks = Math.round((c.getTime()-a.getTime())/(7*24*60*60*1000));
+      const steps = diffWeeks < 0 ? 0 : diffWeeks;
+      let count = 0;
+      const max = Math.min(steps, 520);
+      for(let i=0;i<=max;i++){
+        const dt = new Date(a);
+        dt.setDate(a.getDate() + i*7);
+        const wn = isoWeekYearAndNumber(dt).weekNo;
+        const matches = (parity==="even" && isEven(wn)) || (parity==="odd" && !isEven(wn));
+        if(matches) count++;
       }
+      return Math.max(0, count-1);
+    }
 
-      function isEven(n) {
-        return n % 2 === 0;
-      }
+    const LS_KEY = "weekend_support_roster_static_v1";
 
-      function startOfWeekendForIsoWeek(isoYear, weekNo) {
-        const jan4 = new Date(isoYear, 0, 4);
-        const jan4Day = jan4.getDay() || 7;
-        const mondayWeek1 = new Date(jan4);
-        mondayWeek1.setDate(jan4.getDate() - (jan4Day - 1));
+    const evenSupport = { primary:"Jerico", note:"Andre is langdurig ziek", supporters:["Younes","Tim"] };
+    const oddSupport  = { primary:"Grada",  note:"", supporters:["Lion","Mille"] };
 
-        const monday = new Date(mondayWeek1);
-        monday.setDate(mondayWeek1.getDate() + (weekNo - 1) * 7);
-
-        const saturday = new Date(monday);
-        saturday.setDate(monday.getDate() + 5);
-        return saturday;
-      }
-
-      function fmtDate(d) {
-        return d.toLocaleDateString(undefined, {
-          weekday: "short",
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-      }
-
-      function clampInt(v, fallback) {
-        const n = parseInt(String(v), 10);
-        return Number.isFinite(n) ? n : fallback;
-      }
-
-      function parityIndexFromAnchor(anchorYear, anchorWeek, currentYear, currentWeek, parity) {
-        const a = startOfWeekendForIsoWeek(anchorYear, anchorWeek);
-        const c = startOfWeekendForIsoWeek(currentYear, currentWeek);
-
-        const diffWeeks = Math.round((c.getTime() - a.getTime()) / (7 * 24 * 60 * 60 * 1000));
-        const steps = diffWeeks < 0 ? 0 : diffWeeks;
-
-        let count = 0;
-        const max = Math.min(steps, 520);
-
-        for (let i = 0; i <= max; i++) {
-          const dt = new Date(a);
-          dt.setDate(a.getDate() + i * 7);
-          const { weekNo } = isoWeekYearAndNumber(dt);
-          const matches = (parity === "even" && isEven(weekNo)) || (parity === "odd" && !isEven(weekNo));
-          if (matches) count++;
+    function loadSettings(isoYear){
+      try{
+        const raw = localStorage.getItem(LS_KEY);
+        if(!raw){
+          return { evenAnchorYear: isoYear, evenAnchorWeek: 2, oddAnchorYear: isoYear, oddAnchorWeek: 1 };
         }
+        const s = JSON.parse(raw);
+        return {
+          evenAnchorYear: parseInt(s.evenAnchorYear,10) || isoYear,
+          evenAnchorWeek: parseInt(s.evenAnchorWeek,10) || 2,
+          oddAnchorYear: parseInt(s.oddAnchorYear,10)  || isoYear,
+          oddAnchorWeek: parseInt(s.oddAnchorWeek,10)  || 1,
+        };
+      }catch{
+        return { evenAnchorYear: isoYear, evenAnchorWeek: 2, oddAnchorYear: isoYear, oddAnchorWeek: 1 };
+      }
+    }
 
-        return Math.max(0, count - 1);
+    function saveSettings(s){
+      localStorage.setItem(LS_KEY, JSON.stringify(s));
+    }
+
+    function render(){
+      const today = new Date();
+      const { isoYear, weekNo } = isoWeekYearAndNumber(today);
+      const parity = isEven(weekNo) ? "even" : "odd";
+      const settings = loadSettings(isoYear);
+
+      // fill inputs
+      document.getElementById("evenYear").value = settings.evenAnchorYear;
+      document.getElementById("evenWeek").value = settings.evenAnchorWeek;
+      document.getElementById("oddYear").value  = settings.oddAnchorYear;
+      document.getElementById("oddWeek").value  = settings.oddAnchorWeek;
+
+      document.getElementById("weekline").textContent =
+        `Huidige ISO week: ${weekNo} (${isoYear}) — ${parity==="even" ? "even" : "oneven"}`;
+
+      let group, idx, supporter, label;
+      if(parity==="even"){
+        group = evenSupport; label = "Even week";
+        idx = parityIndexFromAnchor(settings.evenAnchorYear, settings.evenAnchorWeek, isoYear, weekNo, "even");
+        supporter = group.supporters[idx % group.supporters.length];
+      }else{
+        group = oddSupport; label = "Oneven week";
+        idx = parityIndexFromAnchor(settings.oddAnchorYear, settings.oddAnchorWeek, isoYear, weekNo, "odd");
+        supporter = group.supporters[idx % group.supporters.length];
       }
 
-      const LS_KEY = "weekend_support_roster_v1";
+      document.getElementById("thisweek").textContent = `${label} — ondersteuning voor ${group.primary}`;
+      document.getElementById("supporter").textContent = supporter;
+      document.getElementById("step").textContent = `Roulatie stap #${idx+1}`;
+      document.getElementById("note").textContent = group.note ? `Opmerking: ${group.note}` : "";
 
-      function App() {
-        const evenSupport = useMemo(
-          () => ({
-            duty: "IC dienst",
-            primary: "Jerico",
-            note: "Andre is langdurig ziek",
-            supporters: ["Younes", "Tim"],
-            label: "Even weken",
-          }),
-          []
-        );
+      // upcoming 8 weekends
+      const tbody = document.getElementById("upcoming");
+      tbody.innerHTML = "";
+      const now = new Date();
+      for(let i=0;i<8;i++){
+        const d = new Date(now);
+        d.setDate(now.getDate() + i*7);
+        const { isoYear:y, weekNo:w } = isoWeekYearAndNumber(d);
+        const isE = isEven(w);
+        let p = isE ? "even" : "odd";
+        let primary = isE ? evenSupport.primary : oddSupport.primary;
+        let list = isE ? evenSupport.supporters : oddSupport.supporters;
+        let aY = isE ? settings.evenAnchorYear : settings.oddAnchorYear;
+        let aW = isE ? settings.evenAnchorWeek : settings.oddAnchorWeek;
+        let ridx = parityIndexFromAnchor(aY, aW, y, w, p);
+        let sup = list[ridx % list.length];
+        const date = startOfWeekendForIsoWeek(y, w);
 
-        const oddSupport = useMemo(
-          () => ({
-            duty: "IC dienst",
-            primary: "Grada",
-            supporters: ["Lion", "Mille"],
-            label: "Oneven weken",
-          }),
-          []
-        );
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${fmtDate(date)}</td>
+          <td>${w} (${p==="even" ? "even" : "oneven"})</td>
+          <td>${primary}</td>
+          <td style="font-weight:650">${sup}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
 
-        const today = new Date();
-        const { isoYear, weekNo } = isoWeekYearAndNumber(today);
-        const parity = isEven(weekNo) ? "even" : "odd";
+    document.getElementById("saveBtn").addEventListener("click", ()=>{
+      const s = {
+        evenAnchorYear: parseInt(document.getElementById("evenYear").value,10) || new Date().getFullYear(),
+        evenAnchorWeek: parseInt(document.getElementById("evenWeek").value,10) || 2,
+        oddAnchorYear:  parseInt(document.getElementById("oddYear").value,10)  || new Date().getFullYear(),
+        oddAnchorWeek:  parseInt(document.getElementById("oddWeek").value,10)  || 1,
+      };
+      saveSettings(s);
+      render();
+      alert("Opgeslagen!");
+    });
 
-        const [settings, setSettings] = useState(() => {
-          try {
-            const raw = localStorage.getItem(LS_KEY);
-            if (!raw) {
-              return {
-                evenAnchorYear: isoYear,
-                evenAnchorWeek: 2,
-                oddAnchorYear: isoYear,
-                oddAnchorWeek: 1,
-              };
-            }
-            const s = JSON.parse(raw);
-            return {
-              evenAnchorYear: clampInt(s.evenAnchorYear, isoYear),
-              evenAnchorWeek: clampInt(s.evenAnchorWeek, 2),
-              oddAnchorYear: clampInt(s.oddAnchorYear, isoYear),
-              oddAnchorWeek: clampInt(s.oddAnchorWeek, 1),
-            };
-          } catch {
-            return {
-              evenAnchorYear: isoYear,
-              evenAnchorWeek: 2,
-              oddAnchorYear: isoYear,
-              oddAnchorWeek: 1,
+    document.getElementById("resetBtn").addEventListener("click", ()=>{
+      const { isoYear } = isoWeekYearAndNumber(new Date());
+      saveSettings({ evenAnchorYear: isoYear, evenAnchorWeek: 2, oddAnchorYear: isoYear, oddAnchorWeek: 1 });
+      render();
+      alert("Gerest!");
+    });
+
+    render();
+  </script>
+</body>
+</html>
