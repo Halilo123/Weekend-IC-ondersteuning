@@ -1,400 +1,149 @@
-import React, { useEffect, useMemo, useState } from "react";
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weekend-ondersteuning</title>
 
-/**
- * Weekend-ondersteuning roster
- * - Even weken: Jerico krijgt ondersteuning van Younes/Tim in roulatie
- * - Oneven weken: Grada krijgt ondersteuning van Lion/Mille in roulatie
- *
- * Roulatie wordt bepaald via een "anker" ISO-week per pariteit:
- * - De ankerweek zelf gebruikt supporter index 0
- * - De volgende week met dezelfde pariteit gebruikt index 1, enz.
- */
+    <!-- Tailwind via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-// --- ISO week helpers (no deps) ---
-function isoWeekYearAndNumber(date) {
-  // Work in UTC to avoid DST issues
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    <!-- React 18 (UMD) -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 
-  // Thursday in current week decides ISO year
-  const dayNum = d.getUTCDay() || 7; // Mon=1..Sun=7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    <!-- Babel (zodat JSX in de browser werkt) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
 
-  const isoYear = d.getUTCFullYear();
+  <body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
 
-  // Week 1: the week with Jan 4th
-  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
-  const yearStartDay = yearStart.getUTCDay() || 7;
-  const week1Start = new Date(yearStart);
-  week1Start.setUTCDate(yearStart.getUTCDate() + (yearStartDay <= 4 ? 1 - yearStartDay : 8 - yearStartDay));
+    <script type="text/babel">
+      const { useEffect, useMemo, useState } = React;
 
-  const diffMs = d.getTime() - week1Start.getTime();
-  const weekNo = 1 + Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+      // --- ISO week helpers (no deps) ---
+      function isoWeekYearAndNumber(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7; // Mon=1..Sun=7
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
 
-  return { isoYear, weekNo };
-}
+        const isoYear = d.getUTCFullYear();
 
-function isEven(n) {
-  return n % 2 === 0;
-}
+        const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+        const yearStartDay = yearStart.getUTCDay() || 7;
+        const week1Start = new Date(yearStart);
+        week1Start.setUTCDate(
+          yearStart.getUTCDate() + (yearStartDay <= 4 ? 1 - yearStartDay : 8 - yearStartDay)
+        );
 
-function startOfWeekendForIsoWeek(isoYear, weekNo) {
-  // Returns Saturday of that ISO week (local time)
-  const jan4 = new Date(isoYear, 0, 4);
-  const jan4Day = jan4.getDay() || 7; // Mon=1..Sun=7
-  const mondayWeek1 = new Date(jan4);
-  mondayWeek1.setDate(jan4.getDate() - (jan4Day - 1));
-
-  const monday = new Date(mondayWeek1);
-  monday.setDate(mondayWeek1.getDate() + (weekNo - 1) * 7);
-
-  const saturday = new Date(monday);
-  saturday.setDate(monday.getDate() + 5);
-  return saturday;
-}
-
-function fmtDate(d) {
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function clampInt(v, fallback) {
-  const n = parseInt(String(v), 10);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-// Count how many weeks of a given parity have occurred from an anchor (inclusive) to current (inclusive).
-// Example: anchor even-week => index 0, next even-week => 1, etc.
-function parityIndexFromAnchor(anchorYear, anchorWeek, currentYear, currentWeek, parity /* "even" | "odd" */) {
-  const a = startOfWeekendForIsoWeek(anchorYear, anchorWeek);
-  const c = startOfWeekendForIsoWeek(currentYear, currentWeek);
-
-  const diffWeeks = Math.round((c.getTime() - a.getTime()) / (7 * 24 * 60 * 60 * 1000));
-  const steps = diffWeeks < 0 ? 0 : diffWeeks;
-
-  let count = 0;
-  const max = Math.min(steps, 520); // cap ~10 years
-
-  for (let i = 0; i <= max; i++) {
-    const dt = new Date(a);
-    dt.setDate(a.getDate() + i * 7);
-    const { weekNo } = isoWeekYearAndNumber(dt);
-    const matches = (parity === "even" && isEven(weekNo)) || (parity === "odd" && !isEven(weekNo));
-    if (matches) count++;
-  }
-
-  return Math.max(0, count - 1);
-}
-
-const LS_KEY = "weekend_support_roster_v1";
-
-export default function App() {
-  // Setup (as provided)
-  const evenSupport = useMemo(
-    () => ({
-      duty: "IC dienst",
-      primary: "Jerico",
-      note: "Andre is langdurig ziek",
-      supporters: ["Younes", "Tim"],
-      label: "Even weken",
-    }),
-    []
-  );
-
-  const oddSupport = useMemo(
-    () => ({
-      duty: "IC dienst",
-      primary: "Grada",
-      supporters: ["Lion", "Mille"],
-      label: "Oneven weken",
-    }),
-    []
-  );
-
-  const today = new Date();
-  const { isoYear, weekNo } = isoWeekYearAndNumber(today);
-  const parity = isEven(weekNo) ? "even" : "odd";
-
-  const [settings, setSettings] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (!raw) {
-        // Defaults matching your example:
-        // - first even anchor week => Younes
-        // - first odd anchor week  => Lion
-        return {
-          evenAnchorYear: isoYear,
-          evenAnchorWeek: 2,
-          oddAnchorYear: isoYear,
-          oddAnchorWeek: 1,
-        };
+        const diffMs = d.getTime() - week1Start.getTime();
+        const weekNo = 1 + Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+        return { isoYear, weekNo };
       }
-      const s = JSON.parse(raw);
-      return {
-        evenAnchorYear: clampInt(s.evenAnchorYear, isoYear),
-        evenAnchorWeek: clampInt(s.evenAnchorWeek, 2),
-        oddAnchorYear: clampInt(s.oddAnchorYear, isoYear),
-        oddAnchorWeek: clampInt(s.oddAnchorWeek, 1),
-      };
-    } catch {
-      return {
-        evenAnchorYear: isoYear,
-        evenAnchorWeek: 2,
-        oddAnchorYear: isoYear,
-        oddAnchorWeek: 1,
-      };
-    }
-  });
 
-  useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(settings));
-  }, [settings]);
+      function isEven(n) {
+        return n % 2 === 0;
+      }
 
-  const currentAssignment = useMemo(() => {
-    if (parity === "even") {
-      const idx = parityIndexFromAnchor(
-        settings.evenAnchorYear,
-        settings.evenAnchorWeek,
-        isoYear,
-        weekNo,
-        "even"
-      );
-      return {
-        group: evenSupport,
-        supporter: evenSupport.supporters[idx % evenSupport.supporters.length],
-        parityLabel: "Even week",
-        rotationIndex: idx,
-      };
-    }
+      function startOfWeekendForIsoWeek(isoYear, weekNo) {
+        const jan4 = new Date(isoYear, 0, 4);
+        const jan4Day = jan4.getDay() || 7;
+        const mondayWeek1 = new Date(jan4);
+        mondayWeek1.setDate(jan4.getDate() - (jan4Day - 1));
 
-    const idx = parityIndexFromAnchor(settings.oddAnchorYear, settings.oddAnchorWeek, isoYear, weekNo, "odd");
-    return {
-      group: oddSupport,
-      supporter: oddSupport.supporters[idx % oddSupport.supporters.length],
-      parityLabel: "Oneven week",
-      rotationIndex: idx,
-    };
-  }, [evenSupport, oddSupport, parity, isoYear, weekNo, settings]);
+        const monday = new Date(mondayWeek1);
+        monday.setDate(mondayWeek1.getDate() + (weekNo - 1) * 7);
 
-  const upcoming = useMemo(() => {
-    const items = [];
-    const now = new Date();
+        const saturday = new Date(monday);
+        saturday.setDate(monday.getDate() + 5);
+        return saturday;
+      }
 
-    for (let i = 0; i < 8; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i * 7);
-      const { isoYear: y, weekNo: w } = isoWeekYearAndNumber(d);
-
-      if (isEven(w)) {
-        const idx = parityIndexFromAnchor(settings.evenAnchorYear, settings.evenAnchorWeek, y, w, "even");
-        items.push({
-          isoYear: y,
-          weekNo: w,
-          parity: "even",
-          date: startOfWeekendForIsoWeek(y, w),
-          primary: evenSupport.primary,
-          supporter: evenSupport.supporters[idx % evenSupport.supporters.length],
-        });
-      } else {
-        const idx = parityIndexFromAnchor(settings.oddAnchorYear, settings.oddAnchorWeek, y, w, "odd");
-        items.push({
-          isoYear: y,
-          weekNo: w,
-          parity: "odd",
-          date: startOfWeekendForIsoWeek(y, w),
-          primary: oddSupport.primary,
-          supporter: oddSupport.supporters[idx % oddSupport.supporters.length],
+      function fmtDate(d) {
+        return d.toLocaleDateString(undefined, {
+          weekday: "short",
+          year: "numeric",
+          month: "short",
+          day: "numeric",
         });
       }
-    }
 
-    return items;
-  }, [evenSupport, oddSupport, settings]);
+      function clampInt(v, fallback) {
+        const n = parseInt(String(v), 10);
+        return Number.isFinite(n) ? n : fallback;
+      }
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="max-w-4xl mx-auto p-4 sm:p-8">
-        <header className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Weekend-ondersteuning</h1>
-          <p className="mt-2 text-slate-600">
-            Huidige ISO week: <span className="font-medium">{weekNo}</span> ({isoYear}) —{" "}
-            <span className="font-medium">{parity === "even" ? "even" : "oneven"}</span>
-          </p>
-        </header>
+      function parityIndexFromAnchor(anchorYear, anchorWeek, currentYear, currentWeek, parity) {
+        const a = startOfWeekendForIsoWeek(anchorYear, anchorWeek);
+        const c = startOfWeekendForIsoWeek(currentYear, currentWeek);
 
-        <section className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold">Dit weekend</h2>
-              <p className="text-slate-600 mt-1">
-                {currentAssignment.parityLabel} — ondersteuning voor{" "}
-                <span className="font-medium">{currentAssignment.group.primary}</span>
-              </p>
-              {currentAssignment.group.note ? (
-                <p className="text-slate-500 mt-2 text-sm">Opmerking: {currentAssignment.group.note}</p>
-              ) : null}
-            </div>
+        const diffWeeks = Math.round((c.getTime() - a.getTime()) / (7 * 24 * 60 * 60 * 1000));
+        const steps = diffWeeks < 0 ? 0 : diffWeeks;
 
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-              <div className="text-sm text-slate-600">Ondersteuner</div>
-              <div className="text-2xl font-semibold mt-1">{currentAssignment.supporter}</div>
-              <div className="text-xs text-slate-500 mt-2">Roulatie stap #{currentAssignment.rotationIndex + 1}</div>
-            </div>
-          </div>
-        </section>
+        let count = 0;
+        const max = Math.min(steps, 520);
 
-        <section className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
-            <h3 className="text-lg font-semibold">Komende weekenden (indicatie)</h3>
-            <p className="text-slate-600 mt-1 text-sm">Toont de planning per ISO week (za/zo).</p>
-            <div className="mt-4 overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-slate-500">
-                    <th className="py-2 pr-3">Weekend</th>
-                    <th className="py-2 pr-3">Week</th>
-                    <th className="py-2 pr-3">Voor</th>
-                    <th className="py-2">Ondersteuner</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {upcoming.map((it, idx) => (
-                    <tr key={idx} className="border-t border-slate-100">
-                      <td className="py-2 pr-3 whitespace-nowrap">{fmtDate(it.date)}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        {it.weekNo} ({it.parity === "even" ? "even" : "oneven"})
-                      </td>
-                      <td className="py-2 pr-3 whitespace-nowrap">{it.primary}</td>
-                      <td className="py-2 whitespace-nowrap font-medium">{it.supporter}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        for (let i = 0; i <= max; i++) {
+          const dt = new Date(a);
+          dt.setDate(a.getDate() + i * 7);
+          const { weekNo } = isoWeekYearAndNumber(dt);
+          const matches = (parity === "even" && isEven(weekNo)) || (parity === "odd" && !isEven(weekNo));
+          if (matches) count++;
+        }
 
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
-            <h3 className="text-lg font-semibold">Instellingen (anker voor roulatie)</h3>
-            <p className="text-slate-600 mt-1 text-sm">
-              Hiermee bepaal je welke ISO week als “eerste” telt (die dan de 1e naam in de lijst krijgt). Handig
-              als je midden in het jaar start.
-            </p>
+        return Math.max(0, count - 1);
+      }
 
-            <div className="mt-4 space-y-5">
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <div className="font-medium">Even weken → {evenSupport.primary}</div>
-                <div className="text-sm text-slate-600 mt-1">Supporters: {evenSupport.supporters.join(" / ")}</div>
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <label className="text-sm">
-                    <div className="text-slate-500">Anker jaar</div>
-                    <input
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                      value={settings.evenAnchorYear}
-                      onChange={(e) =>
-                        setSettings((s) => ({ ...s, evenAnchorYear: clampInt(e.target.value, s.evenAnchorYear) }))
-                      }
-                      inputMode="numeric"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    <div className="text-slate-500">Anker week (even)</div>
-                    <input
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                      value={settings.evenAnchorWeek}
-                      onChange={(e) =>
-                        setSettings((s) => ({ ...s, evenAnchorWeek: clampInt(e.target.value, s.evenAnchorWeek) }))
-                      }
-                      inputMode="numeric"
-                    />
-                  </label>
-                </div>
-              </div>
+      const LS_KEY = "weekend_support_roster_v1";
 
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <div className="font-medium">Oneven weken → {oddSupport.primary}</div>
-                <div className="text-sm text-slate-600 mt-1">Supporters: {oddSupport.supporters.join(" / ")}</div>
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <label className="text-sm">
-                    <div className="text-slate-500">Anker jaar</div>
-                    <input
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                      value={settings.oddAnchorYear}
-                      onChange={(e) =>
-                        setSettings((s) => ({ ...s, oddAnchorYear: clampInt(e.target.value, s.oddAnchorYear) }))
-                      }
-                      inputMode="numeric"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    <div className="text-slate-500">Anker week (oneven)</div>
-                    <input
-                      className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
-                      value={settings.oddAnchorWeek}
-                      onChange={(e) =>
-                        setSettings((s) => ({ ...s, oddAnchorWeek: clampInt(e.target.value, s.oddAnchorWeek) }))
-                      }
-                      inputMode="numeric"
-                    />
-                  </label>
-                </div>
-              </div>
+      function App() {
+        const evenSupport = useMemo(
+          () => ({
+            duty: "IC dienst",
+            primary: "Jerico",
+            note: "Andre is langdurig ziek",
+            supporters: ["Younes", "Tim"],
+            label: "Even weken",
+          }),
+          []
+        );
 
-              <button
-                className="w-full rounded-2xl bg-slate-900 text-white py-3 font-medium hover:opacity-95"
-                onClick={() => {
-                  setSettings({
-                    evenAnchorYear: isoYear,
-                    evenAnchorWeek: 2,
-                    oddAnchorYear: isoYear,
-                    oddAnchorWeek: 1,
-                  });
-                }}
-              >
-                Reset naar standaard
-              </button>
+        const oddSupport = useMemo(
+          () => ({
+            duty: "IC dienst",
+            primary: "Grada",
+            supporters: ["Lion", "Mille"],
+            label: "Oneven weken",
+          }),
+          []
+        );
 
-              <div className="text-xs text-slate-500">
-                Tip: als je wil dat “de eerstvolgende even week” altijd met Younes start, zet het anker op die week.
-              </div>
-            </div>
-          </div>
-        </section>
+        const today = new Date();
+        const { isoYear, weekNo } = isoWeekYearAndNumber(today);
+        const parity = isEven(weekNo) ? "even" : "odd";
 
-        <footer className="mt-8 text-xs text-slate-500">
-          Let op: dit gebruikt ISO weeknummers. Als je organisatie een andere definitie van weeknummer gebruikt,
-          zeg het even—dan pas ik de berekening aan.
-        </footer>
-      </div>
-    </div>
-  );
-}
-
-// --- Minimal unit tests (run in dev) ---
-function runUnitTests() {
-  // ISO week known checks (ISO 8601): 2020-12-28 is week 53 of 2020
-  const a = isoWeekYearAndNumber(new Date("2020-12-28T12:00:00Z"));
-  console.assert(a.isoYear === 2020 && a.weekNo === 53, "ISO week calc failed for 2020-12-28", a);
-
-  // 2021-01-04 is week 1 of 2021
-  const b = isoWeekYearAndNumber(new Date("2021-01-04T12:00:00Z"));
-  console.assert(b.isoYear === 2021 && b.weekNo === 1, "ISO week calc failed for 2021-01-04", b);
-
-  // Parity rotation index: anchor even week 2, next even week 4 => index 1
-  const idx = parityIndexFromAnchor(2025, 2, 2025, 4, "even");
-  console.assert(idx === 1, "parityIndexFromAnchor failed (even)", idx);
-
-  // Anchor odd week 1, next odd week 3 => index 1
-  const idx2 = parityIndexFromAnchor(2025, 1, 2025, 3, "odd");
-  console.assert(idx2 === 1, "parityIndexFromAnchor failed (odd)", idx2);
-}
-
-try {
-  // Only in dev; guard environments where `process` is undefined.
-  const isProd = typeof process !== "undefined" && process.env && process.env.NODE_ENV === "production";
-  if (!isProd) runUnitTests();
-} catch {
-  // no-op
-}
+        const [settings, setSettings] = useState(() => {
+          try {
+            const raw = localStorage.getItem(LS_KEY);
+            if (!raw) {
+              return {
+                evenAnchorYear: isoYear,
+                evenAnchorWeek: 2,
+                oddAnchorYear: isoYear,
+                oddAnchorWeek: 1,
+              };
+            }
+            const s = JSON.parse(raw);
+            return {
+              evenAnchorYear: clampInt(s.evenAnchorYear, isoYear),
+              evenAnchorWeek: clampInt(s.evenAnchorWeek, 2),
+              oddAnchorYear: clampInt(s.oddAnchorYear, isoYear),
+              oddAnchorWeek: clampInt(s.oddAnchorWeek, 1),
+            };
+          } catch {
+            return {
+              evenAnchorYear: isoYear,
+              evenAnchorWeek: 2,
+              oddAnchorYear: isoYear,
+              oddAnchorWeek: 1,
