@@ -1,1 +1,257 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weekend ondersteuning – IC dienst</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; background:#f6f7fb; color:#111; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 18px; }
+    .card { background:#fff; border-radius: 14px; padding: 16px; box-shadow: 0 6px 22px rgba(0,0,0,.06); margin: 12px 0; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    h2 { font-size: 16px; margin: 0 0 10px; }
+    .muted { color:#555; font-size: 13px; }
+    .pill { display:inline-block; padding: 6px 10px; border-radius: 999px; background:#eef2ff; font-weight: 600; }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 760px){ .grid { grid-template-columns: 1fr 1fr; } }
+    table { width:100%; border-collapse: collapse; overflow:hidden; border-radius: 12px; }
+    th, td { text-align:left; padding: 10px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { background:#fafafa; font-size: 13px; color:#333; }
+    tr:last-child td { border-bottom: none; }
+    .big { font-size: 18px; font-weight: 700; }
+    .row { display:flex; flex-wrap: wrap; align-items:center; gap: 10px; }
+    button { border:0; border-radius: 12px; padding: 10px 12px; background:#111; color:#fff; font-weight: 650; cursor:pointer; }
+    button.secondary { background:#e9e9ef; color:#111; }
+    input[type="date"]{ padding: 10px 12px; border-radius: 12px; border:1px solid #ddd; background:#fff; }
+    .warn { background:#fff7ed; border: 1px solid #fed7aa; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Weekend ondersteuning – IC dienst</h1>
+      <div class="row">
+        <span class="pill" id="weekPill">Week ?</span>
+        <span class="pill" id="parityPill">Even/Oneven?</span>
+      </div>
+      <p class="muted" id="todayLine"></p>
+
+      <div class="card warn">
+        <div class="big">Langdurig ziek: Andre</div>
+        <div class="muted">Andre wordt niet ingepland in deze roulatie.</div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Dit (komende) weekend</h2>
+          <div class="big" id="thisWeekendRange">–</div>
+          <p class="muted" id="thisWeekendText">–</p>
+        </div>
+        <div class="card">
+          <h2>Check een andere datum</h2>
+          <div class="row">
+            <input id="datePick" type="date" />
+            <button class="secondary" id="btnToday">Vandaag</button>
+          </div>
+          <p class="muted" id="pickedText">Kies een datum om te zien wat dat weekend is.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Komende 10 weekenden</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Weekend</th>
+            <th>Week</th>
+            <th>Even/Oneven</th>
+            <th>Ondersteuning</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <p class="muted">Weeknummer = ISO week (zoals in NL agenda’s meestal gebruikt).</p>
+    </div>
+
+    <div class="card">
+      <h2>Instellingen (nu hardcoded)</h2>
+      <p class="muted">
+        Even weekenden: <b>Younes</b> + <b>Tim</b> ondersteunen <b>Jerico</b><br/>
+        Oneven weekenden: <b>Lion</b> + <b>Mille</b> ondersteunen <b>Grada</b>
+      </p>
+      <p class="muted">
+        Wil je echte “roulatie” (bijv. iedereen uit een lijst om-en-om, en automatisch vervangen bij ziekte),
+        zeg even hoeveel medewerkers er in de pool zitten en of je per weekend 1 of 2 ondersteuners nodig hebt.
+      </p>
+    </div>
+  </div>
+
+<script>
+  // === Config ===
+  const config = {
+    even: { supporters: ["Younes", "Tim"], supports: "Jerico" },
+    odd:  { supporters: ["Lion", "Mille"], supports: "Grada" },
+    sickLongTerm: ["Andre"],
+    weekendsToShow: 10
+  };
+
+  // === Helpers ===
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function formatDateNL(d){
+    return `${pad2(d.getDate())}-${pad2(d.getMonth()+1)}-${d.getFullYear()}`;
+  }
+
+  // ISO week number (ISO-8601)
+  function isoWeekNumber(date){
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    // Thursday in current week decides the year.
+    const dayNum = d.getUTCDay() || 7; // Mon=1..Sun=7
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return { year: d.getUTCFullYear(), week: weekNo };
+  }
+
+  function isEvenWeek(date){
+    const { week } = isoWeekNumber(date);
+    return (week % 2) === 0;
+  }
+
+  // For any date, get that weekend's Saturday and Sunday (NL weekend).
+  // We define "weekend" as Sat+Sun; parity based on the ISO week of Saturday.
+  function weekendForDate(date){
+    const d = new Date(date);
+    const day = d.getDay(); // Sun=0..Sat=6
+    // Move to Saturday of that week: if already Sat (6) -> 0; if Sun (0) -> -1 (go back to Sat)
+    const diffToSat = (6 - day);
+    const sat = new Date(d);
+    sat.setDate(d.getDate() + diffToSat);
+    const sun = new Date(sat);
+    sun.setDate(sat.getDate() + 1);
+    return { sat, sun };
+  }
+
+  // Next Saturday from "now" (if today is Sat/Sun it returns this weekend's Sat)
+  function nextWeekendFrom(date){
+    const d = new Date(date);
+    const day = d.getDay(); // 0..6
+    const sat = new Date(d);
+    const daysUntilSat = (6 - day + 7) % 7;
+    sat.setDate(d.getDate() + daysUntilSat);
+    const sun = new Date(sat);
+    sun.setDate(sat.getDate() + 1);
+    return { sat, sun };
+  }
+
+  function assignmentForWeekendSaturday(sat){
+    const even = isEvenWeek(sat);
+    const key = even ? "even" : "odd";
+    const a = config[key];
+    const { year, week } = isoWeekNumber(sat);
+    return {
+      key,
+      even,
+      week,
+      year,
+      supports: a.supports,
+      supporters: a.supporters
+    };
+  }
+
+  function assignmentText(a){
+    return `${a.supporters.join(" + ")} ondersteunen ${a.supports}`;
+  }
+
+  function renderHeader(now){
+    const { year, week } = isoWeekNumber(now);
+    document.getElementById("weekPill").textContent = `Week ${week} (${year})`;
+    const parity = (week % 2 === 0) ? "Even week" : "Oneven week";
+    document.getElementById("parityPill").textContent = parity;
+
+    const days = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+    document.getElementById("todayLine").textContent =
+      `Vandaag: ${days[now.getDay()]} ${formatDateNL(now)} (Europe/Amsterdam)`;
+  }
+
+  function renderThisWeekend(now){
+    const { sat, sun } = nextWeekendFrom(now);
+    const a = assignmentForWeekendSaturday(sat);
+    document.getElementById("thisWeekendRange").textContent =
+      `${formatDateNL(sat)} – ${formatDateNL(sun)}`;
+    document.getElementById("thisWeekendText").textContent =
+      `${a.even ? "Even" : "Oneven"} weekend (ISO week ${a.week}): ${assignmentText(a)}`;
+  }
+
+  function renderTable(now){
+    const tbody = document.getElementById("tableBody");
+    tbody.innerHTML = "";
+
+    let { sat, sun } = nextWeekendFrom(now);
+
+    for(let i=0; i<config.weekendsToShow; i++){
+      const a = assignmentForWeekendSaturday(sat);
+
+      const tr = document.createElement("tr");
+      const tdWeekend = document.createElement("td");
+      tdWeekend.textContent = `${formatDateNL(sat)} – ${formatDateNL(sun)}`;
+
+      const tdWeek = document.createElement("td");
+      tdWeek.textContent = `${a.week} (${a.year})`;
+
+      const tdParity = document.createElement("td");
+      tdParity.textContent = a.even ? "Even" : "Oneven";
+
+      const tdAssign = document.createElement("td");
+      tdAssign.textContent = assignmentText(a);
+
+      tr.appendChild(tdWeekend);
+      tr.appendChild(tdWeek);
+      tr.appendChild(tdParity);
+      tr.appendChild(tdAssign);
+      tbody.appendChild(tr);
+
+      // next weekend
+      sat = new Date(sat); sun = new Date(sun);
+      sat.setDate(sat.getDate() + 7);
+      sun.setDate(sun.getDate() + 7);
+    }
+  }
+
+  function renderPicked(date){
+    const picked = new Date(date);
+    const { sat, sun } = weekendForDate(picked);
+    const a = assignmentForWeekendSaturday(sat);
+
+    document.getElementById("pickedText").textContent =
+      `Datum ${formatDateNL(picked)} valt in weekend ${formatDateNL(sat)} – ${formatDateNL(sun)}: ` +
+      `${a.even ? "Even" : "Oneven"} weekend (ISO week ${a.week}) → ${assignmentText(a)}.`;
+  }
+
+  // === Init ===
+  const now = new Date();
+  renderHeader(now);
+  renderThisWeekend(now);
+  renderTable(now);
+
+  const datePick = document.getElementById("datePick");
+  datePick.value = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-${pad2(now.getDate())}`;
+  datePick.addEventListener("change", (e) => renderPicked(e.target.value));
+
+  document.getElementById("btnToday").addEventListener("click", () => {
+    const n = new Date();
+    datePick.value = `${n.getFullYear()}-${pad2(n.getMonth()+1)}-${pad2(n.getDate())}`;
+    renderHeader(n);
+    renderThisWeekend(n);
+    renderTable(n);
+    renderPicked(datePick.value);
+  });
+
+  // show initial pick
+  renderPicked(datePick.value);
+</script>
+</body>
+</html>
 
